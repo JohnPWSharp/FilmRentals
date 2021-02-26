@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: filmrentals-svc
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+  selector:
+    app: filmrentals
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysqlapp
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: filmrentals
+  template:
+    metadata:
+      labels:
+        app: filmrentals
+    spec:
+      nodeSelector:
+        hardware: powerproc
+      containers:
+      - name: filmrentals-ctr
+        image:  jpwsregistry.azurecr.io/filmrentals:v1
+        ports:
+        - containerPort: 80
+        env:
+        - name: MYSQL_USER
+          value: 'azureuser'
+        - name: MYSQL_PASSWORD
+          value: 'Pa55w.rd'
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: mysqldbms
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+  selector:
+    app: mysqldbms
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pv-claim
+  labels:
+    app: mysqldbms
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: mysqldbms
+spec:
+  selector:
+    matchLabels:
+      app: mysqldbms
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: mysqldbms
+    spec:
+      hostname: mysqlserver
+      containers:
+      - image: mysql
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: 'Pa55w.rd'
+        - name: MYSQL_USER
+          value: 'azureuser'
+        - name: MYSQL_PASSWORD
+          value: 'Pa55w.rd'
+        - name: MYSQL_DATABASE
+          value: 'filmrentals'
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: mysql-pv-claim
